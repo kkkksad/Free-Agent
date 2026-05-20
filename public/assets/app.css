@@ -135,33 +135,67 @@ p[data-tone="error"] {
   gap: 6px;
 }
 
-.session-button {
+.session-card {
   display: grid;
-  gap: 4px;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
   width: 100%;
-  min-height: 58px;
   padding: 10px;
   border: 1px solid var(--line);
+  border-radius: 8px;
   background: var(--panel-solid);
+}
+
+.session-card:hover,
+.session-card.active {
+  border-color: var(--accent);
+  background: var(--panel-soft);
+}
+
+.session-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--text);
   text-align: left;
   cursor: pointer;
 }
 
-.session-button:hover,
-.session-button.active {
-  border-color: var(--accent);
-  background: var(--panel-soft);
+.session-actions {
+  display: flex;
+  gap: 4px;
 }
 
-.session-button strong,
-.session-button span {
+.session-action {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.session-action:hover {
+  border-color: var(--line);
+  background: var(--panel-solid);
+  color: var(--accent);
+}
+
+.session-main strong,
+.session-main span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.session-button span {
+.session-main span {
   color: var(--muted);
   font-size: 12px;
 }
@@ -179,6 +213,8 @@ p[data-tone="error"] {
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -196,6 +232,11 @@ p[data-tone="error"] {
 
 .tool-button:hover {
   border-color: var(--accent);
+}
+
+.tool-button:disabled {
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 .chat {
@@ -296,12 +337,27 @@ p[data-tone="error"] {
 }
 
 .bubble pre {
+  position: relative;
   overflow: auto;
   padding: 12px;
   border: 1px solid #26332f;
   border-radius: 8px;
   background: #17211d;
   color: #eef8f4;
+}
+
+.code-copy {
+  position: sticky;
+  left: 100%;
+  display: block;
+  width: max-content;
+  margin: 0 0 8px auto;
+  padding: 4px 8px;
+  border: 1px solid rgba(238, 248, 244, 0.24);
+  background: rgba(255, 255, 255, 0.08);
+  color: #eef8f4;
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .bubble code {
@@ -352,6 +408,30 @@ p[data-tone="error"] {
   border-top: 1px solid var(--line);
 }
 
+.prompt-templates {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.prompt-templates button,
+.tag {
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.prompt-templates button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 textarea,
 input,
 select {
@@ -389,6 +469,13 @@ select:focus {
   grid-template-rows: 1fr 1fr;
   gap: 8px;
   width: 94px;
+}
+
+.composer-meta {
+  grid-column: 1 / 2;
+  min-height: 20px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .primary-button,
@@ -443,6 +530,18 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-solid);
+}
+
+.model-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag.strong {
+  border-color: rgba(15, 118, 110, 0.28);
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--accent);
 }
 
 label {
@@ -519,6 +618,10 @@ label {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto;
     width: 100%;
+  }
+
+  .composer-meta {
+    grid-column: 1 / -1;
   }
 
   .message {

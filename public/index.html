@@ -31,6 +31,12 @@
             <p id="modelBadge">未选择模型</p>
           </div>
           <div class="toolbar" aria-label="工具栏">
+            <button class="tool-button" id="continueButton" type="button" title="继续生成" aria-label="继续生成">
+              <span aria-hidden="true">↳</span>
+            </button>
+            <button class="tool-button" id="regenerateButton" type="button" title="重新生成" aria-label="重新生成">
+              <span aria-hidden="true">↻</span>
+            </button>
             <button class="tool-button" id="copyLastButton" type="button" title="复制最后回复" aria-label="复制最后回复">
               <span aria-hidden="true">⧉</span>
             </button>
@@ -46,11 +52,18 @@
         <div class="chat" id="chatLog" aria-live="polite"></div>
 
         <form class="composer" id="chatForm">
+          <div class="prompt-templates" aria-label="常用提示模板">
+            <button type="button" data-template="解释这段代码，说明核心逻辑、输入输出和潜在风险：">解释代码</button>
+            <button type="button" data-template="帮我检查这段代码的 bug，按严重程度列出问题和修复建议：">找 bug</button>
+            <button type="button" data-template="帮我优化这段内容，保持含义不变，让结构更清晰：">优化</button>
+            <button type="button" data-template="请总结下面内容，给出要点和下一步建议：">总结</button>
+          </div>
           <textarea id="promptInput" rows="3" placeholder="输入内容"></textarea>
           <div class="composer-actions">
             <button class="secondary-button" id="stopButton" type="button" disabled>停止</button>
             <button class="primary-button" id="sendButton" type="submit">发送</button>
           </div>
+          <div class="composer-meta" id="composerMeta">0 字 · 未选择模型</div>
         </form>
       </section>
 
@@ -68,6 +81,7 @@
             <span>模型</span>
             <select id="modelSelect"></select>
           </label>
+          <div class="model-tags" id="modelTags" aria-label="模型标签"></div>
           <label>
             <span>模型池</span>
             <select id="poolSelect">

@@ -1,6 +1,11 @@
+import { setBubbleContent } from './markdown.js';
+import { contentDelta, parseSseChunk } from './stream.js';
+import { createTypewriter } from './typewriter.js';
+
 const relayKeyInput = document.querySelector('#relayKeyInput');
 const modelSelect = document.querySelector('#modelSelect');
 const poolSelect = document.querySelector('#poolSelect');
+const modelTags = document.querySelector('#modelTags');
 const promptInput = document.querySelector('#promptInput');
 const systemPromptInput = document.querySelector('#systemPromptInput');
 const temperatureInput = document.querySelector('#temperatureInput');
@@ -17,9 +22,13 @@ const refreshButton = document.querySelector('#refreshButton');
 const clearButton = document.querySelector('#clearButton');
 const copyLastButton = document.querySelector('#copyLastButton');
 const exportButton = document.querySelector('#exportButton');
+const continueButton = document.querySelector('#continueButton');
+const regenerateButton = document.querySelector('#regenerateButton');
 const newChatButton = document.querySelector('#newChatButton');
 const sessionList = document.querySelector('#sessionList');
 const sessionSearchInput = document.querySelector('#sessionSearchInput');
+const promptTemplates = document.querySelector('.prompt-templates');
+const composerMeta = document.querySelector('#composerMeta');
 const statusText = document.querySelector('#statusText');
 const modelBadge = document.querySelector('#modelBadge');
 const turnBadge = document.querySelector('#turnBadge');
@@ -45,6 +54,21 @@ const state = {
   busy: false,
   controller: null,
 };
+
+const typewriter = createTypewriter({
+  frameMs: 16,
+  charsPerFrame: 3,
+  onUpdate(message, visibleContent) {
+    message.visibleContent = visibleContent;
+    if (message.bubble) {
+      setBubbleContent(message.bubble, visibleContent, message.role, copyText);
+    }
+    if (message.status && message.streaming) {
+      message.status.textContent = '正在生成';
+    }
+    scrollToBottom();
+  },
+});
 
 function nowId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -136,6 +160,48 @@ function updateMeta() {
   conversationTitle.textContent = session?.title || '新对话';
   modelBadge.textContent = modelSelect.value || '未选择模型';
   turnBadge.textContent = `${session?.messages.length || 0} 条消息`;
+  renderModelTags();
+  updateComposerMeta();
+}
+
+function updateComposerMeta() {
+  const count = promptInput.value.trim().length;
+  const model = modelSelect.value || '未选择模型';
+  composerMeta.textContent = `${count} 字 · ${model}`;
+  promptInput.style.height = 'auto';
+  promptInput.style.height = `${Math.min(promptInput.scrollHeight, 240)}px`;
+}
+
+function modelTagList(model) {
+  const tags = [];
+  if (!model) return tags;
+  if (model === 'openrouter/free') tags.push('免费路由');
+  if (model.endsWith(':free')) tags.push('免费');
+  if (/coder|code|qwen/i.test(model)) tags.push('代码');
+  if (/baidu|qwen|free/i.test(model)) tags.push('中文可试');
+  if (model === FALLBACK_MODEL) tags.push('备用');
+  return [...new Set(tags)];
+}
+
+function renderModelTags() {
+  modelTags.replaceChildren();
+  const model = modelSelect.value;
+  const tags = modelTagList(model);
+
+  if (!tags.length) {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = '未识别';
+    modelTags.append(tag);
+    return;
+  }
+
+  for (const label of tags) {
+    const tag = document.createElement('span');
+    tag.className = `tag${label === '备用' || label === '代码' ? ' strong' : ''}`;
+    tag.textContent = label;
+    modelTags.append(tag);
+  }
 }
 
 function selectModels(models) {
@@ -162,26 +228,43 @@ function renderAll() {
 function renderSessions() {
   sessionList.replaceChildren();
   const keyword = sessionSearchInput.value.trim().toLowerCase();
+  const sessions = [...state.sessions].sort((left, right) => {
+    if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+    return (right.updatedAt || 0) - (left.updatedAt || 0);
+  });
 
-  for (const session of state.sessions) {
+  for (const session of sessions) {
     const haystack = `${session.title} ${session.messages.map((message) => message.content).join(' ')}`.toLowerCase();
     if (keyword && !haystack.includes(keyword)) {
       continue;
     }
 
+    const card = document.createElement('article');
+    card.className = `session-card${session.id === state.activeId ? ' active' : ''}`;
+    card.dataset.id = session.id;
+
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `session-button${session.id === state.activeId ? ' active' : ''}`;
-    button.dataset.id = session.id;
+    button.className = 'session-main';
 
     const title = document.createElement('strong');
-    title.textContent = session.title || '新对话';
+    title.textContent = `${session.pinned ? '★ ' : ''}${session.title || '新对话'}`;
 
     const meta = document.createElement('span');
     meta.textContent = `${session.messages.length} 条消息`;
 
     button.append(title, meta);
-    sessionList.append(button);
+
+    const actions = document.createElement('div');
+    actions.className = 'session-actions';
+    actions.innerHTML = `
+      <button class="session-action" type="button" data-action="pin" title="置顶">${session.pinned ? '★' : '☆'}</button>
+      <button class="session-action" type="button" data-action="rename" title="重命名">✎</button>
+      <button class="session-action" type="button" data-action="delete" title="删除">×</button>
+    `;
+
+    card.append(button, actions);
+    sessionList.append(card);
   }
 }
 
@@ -215,7 +298,11 @@ function renderMessage(message) {
   role.className = 'role';
 
   const label = document.createElement('span');
-  label.textContent = message.role === 'user' ? '你' : message.type === 'error' ? '错误' : '模型';
+  label.textContent = message.role === 'user'
+    ? '你'
+    : message.type === 'error'
+      ? '错误'
+      : `模型${message.model ? ` · ${message.model}` : ''}`;
   role.append(label);
 
   if (message.role === 'assistant' && message.type !== 'error') {
@@ -229,7 +316,7 @@ function renderMessage(message) {
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  setBubbleContent(bubble, message.content, message.role);
+  setBubbleContent(bubble, message.visibleContent ?? message.content, message.role, copyText);
   message.bubble = bubble;
   message.item = item;
 
@@ -240,69 +327,6 @@ function renderMessage(message) {
 
   item.append(role, bubble, status);
   return item;
-}
-
-function escapeHtml(value) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function inlineMarkdown(value) {
-  return escapeHtml(value)
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-}
-
-function markdownToHtml(markdown) {
-  const parts = markdown.split(/```/);
-  return parts.map((part, index) => {
-    if (index % 2 === 1) {
-      const lines = part.replace(/^\w+\n/, '');
-      return `<pre><code>${escapeHtml(lines.trim())}</code></pre>`;
-    }
-
-    return part
-      .split(/\n{2,}/)
-      .map((paragraph) => paragraph.trim())
-      .filter(Boolean)
-      .map((paragraph) => {
-        if (/^[-*]\s/m.test(paragraph)) {
-          const items = paragraph
-            .split('\n')
-            .map((line) => line.replace(/^[-*]\s*/, '').trim())
-            .filter(Boolean)
-            .map((item) => `<li>${inlineMarkdown(item)}</li>`)
-            .join('');
-          return `<ul>${items}</ul>`;
-        }
-
-        if (/^\d+\.\s/m.test(paragraph)) {
-          const items = paragraph
-            .split('\n')
-            .map((line) => line.replace(/^\d+\.\s*/, '').trim())
-            .filter(Boolean)
-            .map((item) => `<li>${inlineMarkdown(item)}</li>`)
-            .join('');
-          return `<ol>${items}</ol>`;
-        }
-
-        return `<p>${inlineMarkdown(paragraph).replace(/\n/g, '<br>')}</p>`;
-      })
-      .join('');
-  }).join('');
-}
-
-function setBubbleContent(bubble, content, role) {
-  if (role === 'assistant') {
-    bubble.innerHTML = markdownToHtml(content || '');
-  } else {
-    bubble.textContent = content;
-  }
 }
 
 function addMessage(role, content, type = role) {
@@ -323,10 +347,12 @@ function addMessage(role, content, type = role) {
 }
 
 function updateMessage(message, content) {
+  typewriter.cancel(message, content);
   message.content = content;
+  message.visibleContent = content;
   message.updatedAt = Date.now();
   if (message.bubble) {
-    setBubbleContent(message.bubble, content, message.role);
+    setBubbleContent(message.bubble, content, message.role, copyText);
   }
   if (message.status) {
     message.status.textContent = '正在生成';
@@ -357,6 +383,8 @@ function setBusy(busy) {
   state.busy = busy;
   sendButton.disabled = busy;
   stopButton.disabled = !busy;
+  continueButton.disabled = busy;
+  regenerateButton.disabled = busy;
   sendButton.textContent = busy ? '发送中' : '发送';
 }
 
@@ -408,31 +436,7 @@ async function fetchModels() {
   setStatus(`已连接，${modelSelect.options.length} 个模型`);
 }
 
-function parseSseChunk(buffer, onEvent) {
-  const normalized = buffer.replace(/\r\n/g, '\n');
-  const parts = normalized.split('\n\n');
-  const rest = parts.pop() ?? '';
-
-  for (const part of parts) {
-    const data = part
-      .split('\n')
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).trimStart())
-      .join('\n');
-
-    if (data) onEvent(data);
-  }
-
-  return rest;
-}
-
-function contentDelta(payload) {
-  return payload?.choices?.[0]?.delta?.content
-    ?? payload?.choices?.[0]?.message?.content
-    ?? '';
-}
-
-function requestMessages(prompt) {
+function requestMessages(prompt, skipMessageIds = new Set()) {
   const messages = [];
   const systemPrompt = systemPromptInput.value.trim();
   const session = activeSession();
@@ -443,8 +447,10 @@ function requestMessages(prompt) {
 
   if (contextToggle.checked && session) {
     for (const message of session.messages) {
+      if (skipMessageIds.has(message.id)) continue;
       if (message.type === 'error') continue;
       if (message.role === 'user' || message.role === 'assistant') {
+        if (!message.content.trim()) continue;
         messages.push({ role: message.role, content: message.content });
       }
     }
@@ -469,7 +475,9 @@ function detectTaskModel(prompt) {
   return modelSelect.value || FALLBACK_MODEL;
 }
 
-async function requestStream({ prompt, assistantMessage, model }) {
+async function requestStream({ prompt, assistantMessage, model, skipMessageIds }) {
+  assistantMessage.model = model;
+  saveSessions();
   state.controller = new AbortController();
 
   const response = await fetch('/v1/chat/completions', {
@@ -483,7 +491,7 @@ async function requestStream({ prompt, assistantMessage, model }) {
       stream: true,
       temperature: Number(temperatureInput.value),
       max_tokens: Number(maxTokensInput.value),
-      messages: requestMessages(prompt),
+      messages: requestMessages(prompt, skipMessageIds),
     }),
     signal: state.controller.signal,
   });
@@ -514,37 +522,48 @@ async function requestStream({ prompt, assistantMessage, model }) {
     }
   }, 5000);
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
 
-    lastChunkAt = Date.now();
-    buffer += decoder.decode(value, { stream: true });
-    buffer = parseSseChunk(buffer, (data) => {
-      if (data === '[DONE]') return;
-      try {
-        const delta = contentDelta(JSON.parse(data));
-        if (delta) {
-          sawDelta = true;
-          content += delta;
-          updateMessage(assistantMessage, content);
+      lastChunkAt = Date.now();
+      buffer += decoder.decode(value, { stream: true });
+      buffer = parseSseChunk(buffer, (data) => {
+        if (data === '[DONE]') return;
+        try {
+          const delta = contentDelta(JSON.parse(data));
+          if (delta) {
+            sawDelta = true;
+            content += delta;
+            assistantMessage.content = content;
+            assistantMessage.updatedAt = Date.now();
+            const session = activeSession();
+            if (session) {
+              session.updatedAt = Date.now();
+            }
+            typewriter.set(assistantMessage, content);
+            saveSessions();
+          }
+        } catch {
+          // Ignore malformed fragments.
         }
-      } catch {
-        // Ignore malformed fragments.
-      }
-    });
-  }
+      });
+    }
 
-  if (!content) {
-    assistantMessage.type = 'error';
-    updateMessage(assistantMessage, sawDelta ? '(生成已结束但没有可显示内容)' : '(上游没有返回内容)');
-    throw new Error('上游没有返回内容');
-  }
+    if (!content) {
+      assistantMessage.type = 'error';
+      updateMessage(assistantMessage, sawDelta ? '(生成已结束但没有可显示内容)' : '(上游没有返回内容)');
+      throw new Error('上游没有返回内容');
+    }
 
-  clearInterval(idleTimer);
+    await typewriter.flush(assistantMessage);
+  } finally {
+    clearInterval(idleTimer);
+  }
 }
 
-async function sendWithFallback(prompt, assistantMessage) {
+async function sendWithFallback(prompt, assistantMessage, skipMessageIds = new Set()) {
   const primaryModel = detectTaskModel(prompt);
   const models = [primaryModel];
 
@@ -569,7 +588,7 @@ async function sendWithFallback(prompt, assistantMessage) {
       if (model !== primaryModel) {
         setStatus(`切换备用模型：${model}`);
       }
-      await requestStream({ prompt, assistantMessage, model });
+      await requestStream({ prompt, assistantMessage, model, skipMessageIds });
       return;
     } catch (error) {
       lastError = error;
@@ -604,11 +623,22 @@ function exportConversation() {
   setStatus('已导出');
 }
 
-chatForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  if (state.busy) return;
+function lastUserMessage() {
+  const session = activeSession();
+  if (!session) return null;
 
-  const prompt = promptInput.value.trim();
+  for (let index = session.messages.length - 1; index >= 0; index -= 1) {
+    const message = session.messages[index];
+    if (message.role === 'user') {
+      return { message, index };
+    }
+  }
+
+  return null;
+}
+
+async function runPrompt(prompt, { addUser = true, userMessage = null, clearInput = true } = {}) {
+  if (state.busy) return;
   if (!prompt) {
     promptInput.focus();
     return;
@@ -620,18 +650,28 @@ chatForm.addEventListener('submit', async (event) => {
   }
 
   saveSettings();
-  addMessage('user', prompt, 'user');
+  const submittedUserMessage = addUser ? addMessage('user', prompt, 'user') : userMessage;
   const assistantMessage = addMessage('assistant', '', 'assistant');
-  promptInput.value = '';
+  const skipMessageIds = new Set([assistantMessage.id]);
+
+  if (submittedUserMessage?.id) {
+    skipMessageIds.add(submittedUserMessage.id);
+  }
+
+  if (clearInput) {
+    promptInput.value = '';
+    updateComposerMeta();
+  }
+
   setBusy(true);
   setStatus('流式生成中');
 
   try {
-    await sendWithFallback(prompt, assistantMessage);
+    await sendWithFallback(prompt, assistantMessage, skipMessageIds);
     setStatus('已完成');
   } catch (error) {
     if (error.name === 'AbortError') {
-      const text = assistantMessage.content || '已停止生成';
+      const text = assistantMessage.visibleContent || assistantMessage.content || '已停止生成';
       updateMessage(assistantMessage, text);
       setStatus(text === '已停止生成' ? '已停止' : '已中断', 'error');
     } else {
@@ -659,12 +699,53 @@ chatForm.addEventListener('submit', async (event) => {
     renderSessions();
     promptInput.focus();
   }
+}
+
+chatForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  await runPrompt(promptInput.value.trim());
 });
 
 sessionList.addEventListener('click', (event) => {
-  const button = event.target.closest('.session-button');
-  if (!button || state.busy) return;
-  state.activeId = button.dataset.id;
+  const card = event.target.closest('.session-card');
+  if (!card || state.busy) return;
+
+  const action = event.target.closest('[data-action]')?.dataset.action;
+  const session = state.sessions.find((item) => item.id === card.dataset.id);
+  if (!session) return;
+
+  if (action === 'pin') {
+    session.pinned = !session.pinned;
+    session.updatedAt = Date.now();
+    saveSessions();
+    renderAll();
+    return;
+  }
+
+  if (action === 'rename') {
+    const nextTitle = window.prompt('重命名会话', session.title || '新对话');
+    if (nextTitle !== null) {
+      session.title = nextTitle.trim() || '新对话';
+      session.updatedAt = Date.now();
+      saveSessions();
+      renderAll();
+    }
+    return;
+  }
+
+  if (action === 'delete') {
+    if (!window.confirm('删除这个会话？')) return;
+    state.sessions = state.sessions.filter((item) => item.id !== session.id);
+    if (state.activeId === session.id) {
+      state.activeId = state.sessions[0]?.id || null;
+    }
+    if (!state.sessions.length) createSession();
+    saveSessions();
+    renderAll();
+    return;
+  }
+
+  state.activeId = card.dataset.id;
   saveSessions();
   renderAll();
 });
@@ -699,6 +780,40 @@ copyLastButton.addEventListener('click', () => {
 
 exportButton.addEventListener('click', exportConversation);
 
+continueButton.addEventListener('click', async () => {
+  const session = activeSession();
+  if (!session || state.busy || session.messages.length === 0) {
+    setStatus('当前没有可继续的对话', 'error');
+    return;
+  }
+
+  await runPrompt('请继续上一次回答，从中断处继续，不要重复已经写过的内容。', {
+    clearInput: false,
+  });
+});
+
+regenerateButton.addEventListener('click', async () => {
+  if (state.busy) return;
+
+  const session = activeSession();
+  const lastUser = lastUserMessage();
+  if (!session || !lastUser) {
+    setStatus('当前没有可重新生成的问题', 'error');
+    return;
+  }
+
+  session.messages = session.messages.slice(0, lastUser.index + 1);
+  session.updatedAt = Date.now();
+  saveSessions();
+  renderAll();
+
+  await runPrompt(lastUser.message.content, {
+    addUser: false,
+    userMessage: lastUser.message,
+    clearInput: false,
+  });
+});
+
 stopButton.addEventListener('click', () => {
   state.controller?.abort();
 });
@@ -706,6 +821,16 @@ stopButton.addEventListener('click', () => {
 modelSelect.addEventListener('change', () => {
   saveSettings();
   updateMeta();
+});
+
+promptTemplates.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-template]');
+  if (!button) return;
+  const prefix = button.dataset.template;
+  const current = promptInput.value.trim();
+  promptInput.value = current ? `${prefix}\n\n${current}` : prefix;
+  updateComposerMeta();
+  promptInput.focus();
 });
 
 [relayKeyInput, systemPromptInput, contextToggle, fallbackToggle].forEach((input) => {
@@ -729,6 +854,8 @@ poolSelect.addEventListener('change', () => {
 sessionSearchInput.addEventListener('input', () => {
   renderSessions();
 });
+
+promptInput.addEventListener('input', updateComposerMeta);
 
 promptInput.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' && !event.shiftKey) {
