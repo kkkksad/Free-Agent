@@ -282,6 +282,10 @@ p[data-tone="error"] {
   color: var(--danger);
 }
 
+.message.interrupted .message-state {
+  color: var(--gold);
+}
+
 .message.user {
   margin-left: auto;
 }

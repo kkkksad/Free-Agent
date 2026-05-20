@@ -1,5 +1,5 @@
 import { setBubbleContent } from './markdown.js';
-import { contentDelta, parseSseChunk } from './stream.js';
+import { contentDelta, finishReason, parseSseChunk } from './stream.js';
 import { createTypewriter } from './typewriter.js';
 
 const relayKeyInput = document.querySelector('#relayKeyInput');
@@ -42,6 +42,7 @@ const ACTIVE_SESSION_STORAGE = 'openrouter-relay-active-session';
 const FALLBACK_MODEL = 'openrouter/free';
 const CODE_MODEL_PRIORITY = ['qwen/qwen3-coder:free', 'openrouter/free'];
 const STREAM_IDLE_TIMEOUT_MS = 45000;
+const AUTO_CONTINUE_LIMIT = 2;
 
 const SAFE_MODEL_ALIASES = [
   { keywords: ['code', 'coder', '代码', '编程'], model: 'qwen/qwen3-coder:free' },
@@ -53,6 +54,7 @@ const state = {
   activeId: null,
   busy: false,
   controller: null,
+  stopRequested: false,
 };
 
 const typewriter = createTypewriter({
@@ -293,6 +295,7 @@ function renderMessage(message) {
   const item = document.createElement('article');
   item.className = `message ${message.type || message.role}`;
   if (message.streaming) item.classList.add('streaming');
+  if (message.interrupted) item.classList.add('interrupted');
 
   const role = document.createElement('div');
   role.className = 'role';
@@ -475,7 +478,18 @@ function detectTaskModel(prompt) {
   return modelSelect.value || FALLBACK_MODEL;
 }
 
-async function requestStream({ prompt, assistantMessage, model, skipMessageIds }) {
+function streamInterruptedError(message, partialContent) {
+  const error = new Error(message);
+  error.name = 'StreamInterruptedError';
+  error.partialContent = partialContent;
+  return error;
+}
+
+function continuationPrompt() {
+  return '上一次回答可能因为网络或上游断流而中断。请严格从上一条助手回复的末尾继续写，不要重复已经写过的内容。';
+}
+
+async function requestStream({ prompt, assistantMessage, model, skipMessageIds, append = false }) {
   assistantMessage.model = model;
   saveSessions();
   state.controller = new AbortController();
@@ -512,43 +526,66 @@ async function requestStream({ prompt, assistantMessage, model, skipMessageIds }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let content = '';
+  let content = append ? assistantMessage.content || '' : '';
   let sawDelta = false;
+  let sawDone = false;
+  let finalReason = '';
+  let idleTimedOut = false;
   let lastChunkAt = Date.now();
   let idleTimer = setInterval(() => {
     if (Date.now() - lastChunkAt > STREAM_IDLE_TIMEOUT_MS) {
+      idleTimedOut = true;
       state.controller?.abort();
       setStatus('上游生成超时，已中断', 'error');
     }
   }, 5000);
 
   try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
 
-      lastChunkAt = Date.now();
-      buffer += decoder.decode(value, { stream: true });
-      buffer = parseSseChunk(buffer, (data) => {
-        if (data === '[DONE]') return;
-        try {
-          const delta = contentDelta(JSON.parse(data));
-          if (delta) {
-            sawDelta = true;
-            content += delta;
-            assistantMessage.content = content;
-            assistantMessage.updatedAt = Date.now();
-            const session = activeSession();
-            if (session) {
-              session.updatedAt = Date.now();
-            }
-            typewriter.set(assistantMessage, content);
-            saveSessions();
+        lastChunkAt = Date.now();
+        buffer += decoder.decode(value, { stream: true });
+        buffer = parseSseChunk(buffer, (data) => {
+          if (data === '[DONE]') {
+            sawDone = true;
+            return;
           }
-        } catch {
-          // Ignore malformed fragments.
-        }
-      });
+
+          try {
+            const payload = JSON.parse(data);
+            const delta = contentDelta(payload);
+            const reason = finishReason(payload);
+
+            if (reason) {
+              finalReason = reason;
+            }
+
+            if (delta) {
+              sawDelta = true;
+              content += delta;
+              assistantMessage.content = content;
+              assistantMessage.updatedAt = Date.now();
+              const session = activeSession();
+              if (session) {
+                session.updatedAt = Date.now();
+              }
+              typewriter.set(assistantMessage, content);
+              saveSessions();
+            }
+          } catch {
+            // Ignore malformed fragments.
+          }
+        });
+      }
+    } catch (error) {
+      if (error.name === 'AbortError' && !state.stopRequested && content) {
+        throw streamInterruptedError(idleTimedOut ? '上游生成超时' : '流式连接中断', content);
+      }
+
+      throw error;
     }
 
     if (!content) {
@@ -558,13 +595,21 @@ async function requestStream({ prompt, assistantMessage, model, skipMessageIds }
     }
 
     await typewriter.flush(assistantMessage);
+
+    if (!state.stopRequested && finalReason === 'length') {
+      throw streamInterruptedError('达到 Max Tokens，正在尝试续写', content);
+    }
+
+    if (!state.stopRequested && !sawDone && !finalReason) {
+      throw streamInterruptedError('流式连接提前结束', content);
+    }
   } finally {
     clearInterval(idleTimer);
   }
 }
 
-async function sendWithFallback(prompt, assistantMessage, skipMessageIds = new Set()) {
-  const primaryModel = detectTaskModel(prompt);
+async function sendWithFallback(prompt, assistantMessage, skipMessageIds = new Set(), options = {}) {
+  const primaryModel = options.model || detectTaskModel(prompt);
   const models = [primaryModel];
 
   if (fallbackToggle.checked) {
@@ -588,16 +633,43 @@ async function sendWithFallback(prompt, assistantMessage, skipMessageIds = new S
       if (model !== primaryModel) {
         setStatus(`切换备用模型：${model}`);
       }
-      await requestStream({ prompt, assistantMessage, model, skipMessageIds });
+      await requestStream({ prompt, assistantMessage, model, skipMessageIds, append: options.append });
       return;
     } catch (error) {
       lastError = error;
+      if (error.name === 'StreamInterruptedError') throw error;
       if (error.name === 'AbortError') throw error;
       if (!fallbackToggle.checked || model === models.at(-1)) break;
     }
   }
 
   throw lastError;
+}
+
+async function sendWithRecovery(prompt, assistantMessage, skipMessageIds) {
+  let currentPrompt = prompt;
+  let currentSkipMessageIds = skipMessageIds;
+  let append = false;
+
+  for (let attempt = 0; attempt <= AUTO_CONTINUE_LIMIT; attempt += 1) {
+    try {
+      await sendWithFallback(currentPrompt, assistantMessage, currentSkipMessageIds, {
+        append,
+        model: append ? assistantMessage.model : undefined,
+      });
+      return;
+    } catch (error) {
+      if (error.name !== 'StreamInterruptedError' || attempt >= AUTO_CONTINUE_LIMIT || state.stopRequested) {
+        throw error;
+      }
+
+      await typewriter.flush(assistantMessage);
+      setStatus(`检测到断流，正在自动续写 ${attempt + 1}/${AUTO_CONTINUE_LIMIT}`);
+      currentPrompt = continuationPrompt();
+      currentSkipMessageIds = new Set();
+      append = true;
+    }
+  }
 }
 
 function exportConversation() {
@@ -663,17 +735,24 @@ async function runPrompt(prompt, { addUser = true, userMessage = null, clearInpu
     updateComposerMeta();
   }
 
+  state.stopRequested = false;
   setBusy(true);
   setStatus('流式生成中');
 
   try {
-    await sendWithFallback(prompt, assistantMessage, skipMessageIds);
+    await sendWithRecovery(prompt, assistantMessage, skipMessageIds);
     setStatus('已完成');
   } catch (error) {
     if (error.name === 'AbortError') {
       const text = assistantMessage.visibleContent || assistantMessage.content || '已停止生成';
       updateMessage(assistantMessage, text);
       setStatus(text === '已停止生成' ? '已停止' : '已中断', 'error');
+    } else if (error.name === 'StreamInterruptedError') {
+      assistantMessage.interrupted = true;
+      assistantMessage.content = error.partialContent || assistantMessage.content;
+      assistantMessage.visibleContent = assistantMessage.content;
+      assistantMessage.item?.classList.add('interrupted');
+      setStatus('输出未完成，可点继续生成', 'error');
     } else {
       if (assistantMessage.content === '(上游没有返回内容)' || assistantMessage.content === '(生成已结束但没有可显示内容)') {
         assistantMessage.type = 'error';
@@ -689,11 +768,14 @@ async function runPrompt(prompt, { addUser = true, userMessage = null, clearInpu
   } finally {
     markStreaming(assistantMessage, false);
     if (assistantMessage.status) {
-      assistantMessage.status.textContent = assistantMessage.type === 'error'
+      assistantMessage.status.textContent = assistantMessage.interrupted
+        ? '未完成，可继续'
+        : assistantMessage.type === 'error'
         ? '未完成'
         : (assistantMessage.content ? '已完成' : '已停止');
     }
     state.controller = null;
+    state.stopRequested = false;
     setBusy(false);
     saveSessions();
     renderSessions();
@@ -815,6 +897,7 @@ regenerateButton.addEventListener('click', async () => {
 });
 
 stopButton.addEventListener('click', () => {
+  state.stopRequested = true;
   state.controller?.abort();
 });
 

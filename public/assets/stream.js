@@ -21,3 +21,9 @@ export function contentDelta(payload) {
     ?? payload?.choices?.[0]?.message?.content
     ?? '';
 }
+
+export function finishReason(payload) {
+  return payload?.choices?.[0]?.finish_reason
+    ?? payload?.choices?.[0]?.native_finish_reason
+    ?? '';
+}
