@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OpenRouter 中转站</title>
+    <link rel="stylesheet" href="/assets/app.css">
+  </head>
+  <body>
+    <main class="workspace">
+      <aside class="sidebar" aria-label="会话列表">
+        <div class="side-head">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div>
+            <h1>中转站</h1>
+            <p id="statusText">连接中</p>
+          </div>
+        </div>
+        <button class="primary-button full" id="newChatButton" type="button">新对话</button>
+        <label class="search-box" aria-label="搜索会话">
+          <span>搜索</span>
+          <input id="sessionSearchInput" type="search" placeholder="搜索会话或内容">
+        </label>
+        <div class="session-list" id="sessionList"></div>
+      </aside>
+
+      <section class="main-chat" aria-label="聊天窗口">
+        <header class="chat-head">
+          <div>
+            <h2 id="conversationTitle">新对话</h2>
+            <p id="modelBadge">未选择模型</p>
+          </div>
+          <div class="toolbar" aria-label="工具栏">
+            <button class="tool-button" id="copyLastButton" type="button" title="复制最后回复" aria-label="复制最后回复">
+              <span aria-hidden="true">⧉</span>
+            </button>
+            <button class="tool-button" id="exportButton" type="button" title="导出当前对话" aria-label="导出当前对话">
+              <span aria-hidden="true">⇩</span>
+            </button>
+            <button class="tool-button" id="clearButton" type="button" title="清空当前对话" aria-label="清空当前对话">
+              <span aria-hidden="true">⌫</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="chat" id="chatLog" aria-live="polite"></div>
+
+        <form class="composer" id="chatForm">
+          <textarea id="promptInput" rows="3" placeholder="输入内容"></textarea>
+          <div class="composer-actions">
+            <button class="secondary-button" id="stopButton" type="button" disabled>停止</button>
+            <button class="primary-button" id="sendButton" type="submit">发送</button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="inspector" aria-label="参数设置">
+        <section class="panel">
+          <div class="panel-title">
+            <h2>连接</h2>
+            <button class="text-button" id="refreshButton" type="button">刷新</button>
+          </div>
+          <label>
+            <span>访问密钥</span>
+            <input id="relayKeyInput" type="password" autocomplete="off" spellcheck="false">
+          </label>
+          <label>
+            <span>模型</span>
+            <select id="modelSelect"></select>
+          </label>
+          <label>
+            <span>模型池</span>
+            <select id="poolSelect">
+              <option value="code">编码优先</option>
+              <option value="free" selected>免费池</option>
+              <option value="all">全部可用</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>参数</h2>
+            <span id="turnBadge">0 条消息</span>
+          </div>
+          <label>
+            <span>System Prompt</span>
+            <textarea id="systemPromptInput" rows="5" placeholder="可选"></textarea>
+          </label>
+          <label class="range-row">
+            <span>Temperature</span>
+            <output id="temperatureValue">0.7</output>
+            <input id="temperatureInput" type="range" min="0" max="2" step="0.1" value="0.7">
+          </label>
+          <label class="range-row">
+            <span>Max Tokens</span>
+            <output id="maxTokensValue">1024</output>
+            <input id="maxTokensInput" type="range" min="128" max="4096" step="128" value="1024">
+          </label>
+          <label class="checkbox-row">
+            <input id="contextToggle" type="checkbox" checked>
+            <span>保留上下文</span>
+          </label>
+          <label class="checkbox-row">
+            <input id="fallbackToggle" type="checkbox" checked>
+            <span>失败时自动换备用模型</span>
+          </label>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/assets/app.js" type="module"></script>
+  </body>
+</html>
