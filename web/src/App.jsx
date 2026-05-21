@@ -7,12 +7,13 @@ import { SessionSidebar } from './components/SessionSidebar.jsx';
 import { fetchModels, requestChatStream, StreamInterruptedError } from './api/relay.js';
 import { CODE_MODEL_PRIORITY, FALLBACK_MODEL, detectTaskModel, selectModels } from './lib/models.js';
 import { continuationPrompt } from './lib/continuation.js';
+import { sessionMetrics } from './lib/metrics.js';
 import { nowId, readJson, storageKeys, writeJson } from './lib/storage.js';
 
 const defaultSettings = {
   systemPrompt: '',
-  temperature: 0.7,
-  maxTokens: 1024,
+  temperature: 0.3,
+  maxTokens: 2048,
   keepContext: true,
   fallback: true,
 };
@@ -94,6 +95,7 @@ export function App() {
   );
 
   const selectedModels = useMemo(() => selectModels(models, pool), [models, pool]);
+  const metrics = useMemo(() => sessionMetrics(sessions), [sessions]);
 
   function setStatus(next, tone = 'normal') {
     setStatusText(next);
@@ -187,6 +189,20 @@ export function App() {
     return messages;
   }
 
+  function smartTemperature(promptText) {
+    if (/[{}[\];()<>:=]/.test(promptText) || /\b(function|class|import|const|let|var|return|async|await)\b/i.test(promptText)) {
+      return 0.2;
+    }
+    if (/写|创意|文案|故事|头脑风暴/.test(promptText)) {
+      return 0.7;
+    }
+    return 0.3;
+  }
+
+  function smartMaxTokens(promptText) {
+    return promptText.length > 1800 || /完整|详细|长文|代码|实现|重构/.test(promptText) ? 4096 : 2048;
+  }
+
   async function refreshModels(nextKey = relayKey, nextPool = pool) {
     if (!nextKey.trim()) {
       setStatus('请输入访问密钥', 'error');
@@ -237,9 +253,12 @@ export function App() {
           body: {
             model: candidate,
             stream: true,
-            temperature: settings.temperature,
-            max_tokens: settings.maxTokens,
+            temperature: smartTemperature(currentPrompt),
+            max_tokens: smartMaxTokens(currentPrompt),
             messages: buildMessages(session, currentPrompt, skipIds),
+          },
+          onUsage: (usage) => {
+            patchMessage(sessionId, assistantId, (message) => ({ ...message, usage }));
           },
           onDelta: (_delta, fullContent) => {
             typeMessage(sessionId, assistantId, fullContent);
@@ -512,8 +531,7 @@ export function App() {
           model={model}
           models={selectedModels}
           pool={pool}
-          settings={settings}
-          messageCount={activeSession?.messages.length || 0}
+          metrics={metrics}
           onRelayKeyChange={setRelayKey}
           onModelChange={(nextModel) => {
             setModel(nextModel);
@@ -523,7 +541,6 @@ export function App() {
             setPool(nextPool);
             refreshModels(relayKey, nextPool).catch((error) => setStatus(error.message, 'error'));
           }}
-          onSettingsChange={(patch) => setSettings((current) => ({ ...current, ...patch }))}
           onRefresh={() => refreshModels().catch((error) => setStatus(error.message, 'error'))}
         />
       </main>

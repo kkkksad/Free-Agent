@@ -30,6 +30,7 @@ export async function requestChatStream({
   onDelta,
   onStatus,
   onIdleTimeout,
+  onUsage,
   idleTimeoutMs = 45000,
 }) {
   const response = await fetch('/v1/chat/completions', {
@@ -89,6 +90,7 @@ export async function requestChatStream({
           const reason = finishReason(payload);
           const rawDelta = contentDelta(payload);
 
+          if (payload?.usage) onUsage?.(payload.usage);
           if (reason) finalReason = reason;
           if (!rawDelta) return;
 
