@@ -3,6 +3,16 @@ import { DeleteOutlined, EditOutlined, PlusOutlined, PushpinFilled, PushpinOutli
 
 const { Text, Title } = Typography;
 
+function BrandLogo() {
+  return (
+    <svg className="brand-logo" viewBox="0 0 40 40" role="img" aria-label="Free Agent">
+      <rect className="brand-logo-bg" x="1" y="1" width="38" height="38" rx="10" />
+      <path className="brand-logo-mark" d="M12 28V12h16M12 20h12M22 28l6-16" />
+      <circle className="brand-logo-node" cx="28" cy="12" r="3" />
+    </svg>
+  );
+}
+
 export function SessionSidebar({
   sessions,
   activeId,
@@ -31,9 +41,9 @@ export function SessionSidebar({
   return (
     <aside className="sidebar-pane">
       <div className="brand">
-        <div className="brand-mark" aria-hidden="true" />
+        <BrandLogo />
         <div>
-          <Title level={3}>中转站</Title>
+          <Title level={3}>Free Agent</Title>
           <Text type={statusTone === 'error' ? 'danger' : 'secondary'}>{status}</Text>
         </div>
       </div>

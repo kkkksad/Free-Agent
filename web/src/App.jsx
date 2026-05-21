@@ -101,11 +101,9 @@ export function App() {
   }
 
   function updateSessions(updater) {
-    setSessions((current) => {
-      const next = typeof updater === 'function' ? updater(current) : updater;
-      sessionsRef.current = next;
-      return next;
-    });
+    const next = typeof updater === 'function' ? updater(sessionsRef.current) : updater;
+    sessionsRef.current = next;
+    setSessions(next);
   }
 
   function patchSession(sessionId, updater) {
@@ -460,9 +458,13 @@ export function App() {
       locale={zhCN}
       theme={{
         token: {
-          colorPrimary: '#0f766e',
+          colorPrimary: '#2563eb',
           borderRadius: 8,
-          colorBgLayout: '#eef3f1',
+          colorBgLayout: '#f7f7f8',
+          colorText: '#111827',
+          colorTextSecondary: '#6b7280',
+          colorBorder: '#e5e7eb',
+          colorBgContainer: '#ffffff',
           fontFamily: '"Segoe UI", "Microsoft YaHei", Arial, sans-serif',
         },
         components: {
