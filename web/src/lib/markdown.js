@@ -53,24 +53,21 @@ export function markdownToHtml(markdown) {
   }).join('');
 }
 
-export function enhanceCodeBlocks(scope, copyText) {
-  for (const pre of scope.querySelectorAll('pre')) {
-    if (pre.querySelector('.code-copy')) continue;
-    const code = pre.querySelector('code');
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'code-copy';
-    button.textContent = '复制代码';
-    button.addEventListener('click', () => copyText(code?.textContent || pre.textContent || ''));
-    pre.prepend(button);
-  }
+export function codeFenceState(content = '') {
+  const matches = [...content.matchAll(/```([^\n`]*)?/g)];
+  const open = matches.length % 2 === 1;
+  const language = open ? (matches.at(-1)?.[1] || '').trim() : '';
+  return { open, language };
 }
 
-export function setBubbleContent(bubble, content, role, copyText) {
-  if (role === 'assistant') {
-    bubble.innerHTML = markdownToHtml(content || '');
-    enhanceCodeBlocks(bubble, copyText);
-  } else {
-    bubble.textContent = content;
-  }
+export function looksCodeOnly(content = '') {
+  const text = content.trim();
+  if (!text) return false;
+  if (codeFenceState(text).open) return true;
+  const codeSignals = [
+    /[{};]\s*$/,
+    /^\s*(import|export|const|let|var|function|class|def|if|for|while|return)\b/m,
+    /^\s*(<\/?[a-z][\s\S]*>|#[\w-]+\s*\{|[\w.-]+\s*\{)/m,
+  ];
+  return codeSignals.some((pattern) => pattern.test(text));
 }
