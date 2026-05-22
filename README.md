@@ -70,19 +70,17 @@ local-dev-token
 - 继续生成和重新生成最近一次问题。
 - 原生打字机式流式渲染，不依赖第三方插件。
 - 长文本流式输出异常中断时，会自动尝试续写并接到同一条回复后面。
+- 文本、代码、Markdown、JSON、CSV 等文件可作为本轮上下文上传。
 - 清空当前对话。
 - 停止生成。
-- 模型参数设置、模型池和模型标签。
-- 输入字数和当前模型提示。
-- 失败时自动切换 `qwen/qwen3-coder:free` 和 `openrouter/free` 备用模型。
+- 模型池、模型标签、调用次数、Token 估算和模型健康概览。
+- 失败时会按内置策略自动切换 `qwen/qwen3-coder:free` 和 `openrouter/free` 备用模型。
 - 流式请求若长时间没有新内容，会提示并自动中断。
 
-前端代码已按职责拆分：
+React 前端代码位于：
 
-- `public/assets/app.js`：页面状态、事件绑定和请求流程。
-- `public/assets/markdown.js`：Markdown、代码块和复制按钮渲染。
-- `public/assets/stream.js`：SSE 分片解析和增量内容提取。
-- `public/assets/typewriter.js`：打字机式流式显示。
+- `web/src/`：前端源码。
+- `public/`：`npm run build` 后生成的静态页面。
 
 健康检查地址：
 
@@ -95,6 +93,34 @@ http://localhost:3000/health
 ```text
 http://localhost:3000/status
 ```
+
+## 打包成 Windows EXE
+
+本项目提供一个轻量 Windows 便携包方案：`FreeAgent.exe` 负责启动本地 Node
+服务并打开浏览器，OpenRouter Key 仍然只保存在同目录 `.env` 中。
+
+生成便携包：
+
+```powershell
+npm run build
+npm run package:win
+```
+
+生成位置：
+
+```text
+dist/FreeAgent-win-x64/FreeAgent.exe
+```
+
+使用方式：
+
+1. 打开 `dist/FreeAgent-win-x64/`。
+2. 双击 `FreeAgent.exe`。
+3. 第一次运行时按提示粘贴 OpenRouter Key。
+4. 浏览器会自动打开 `http://localhost:3000`。
+
+换 key 时编辑便携目录里的 `.env`，修改 `OPENROUTER_API_KEY` 后重新启动即可。
+不要把 `.env` 发给别人，也不要提交到仓库。
 
 ## 调用方式
 

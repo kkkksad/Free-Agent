@@ -1,4 +1,7 @@
 node_modules/
+dist/
+tools/**/bin/
+tools/**/obj/
 .env
 .env.*
 !.env.example

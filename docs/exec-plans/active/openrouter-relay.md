@@ -602,6 +602,67 @@ OpenAI 兼容接口。客户端只访问自己的中转站，不直接接触 Ope
 - 2026-05-22：文件上传第一阶段按“文本转上下文”实现，原因是它兼容所有文本模型，也不会依赖不同模型的多模态能力差异。
 - 2026-05-22：本轮继续使用轻量 CSS 动画和现有 SVG 趋势图，不引入 ECharts 或大型动画库；等仪表盘数据结构稳定后再考虑接入。
 
+## 本轮追加升级范围：Windows 便携 EXE 启动包
+
+目标：
+
+- 将当前本地中转站打包成 Windows 上可双击启动的 `FreeAgent.exe`。
+- 让用户不需要手动敲 `node src/server.js`，双击后自动启动本地服务并打开浏览器。
+- OpenRouter Key 仍然只保存在用户本机配置文件中，不写进代码、仓库或 exe。
+- 保持自用定位，不做商业授权、安装器、自动更新和账号体系。
+
+背景：
+
+- 用户希望“即开即用”，用于自己玩和本地测试。
+- 当前项目是 Node 后端 + React 构建产物，后端没有第三方运行时依赖，适合做便携目录。
+- 单文件硬塞全部资源进 exe 会增加构建复杂度；本轮优先做可维护的便携包：`FreeAgent.exe` 启动器 + 内置 Node + `src/` + `public/`。
+
+影响范围：
+
+- 新增 Windows 启动器源码，用于检查配置、启动内置 Node 服务、打开浏览器并在退出时关闭子进程。
+- 新增打包脚本，负责构建前端、发布启动器、复制 Node、复制后端和静态资源。
+- 新增 package script，方便后续一条命令生成便携包。
+- 更新 `.gitignore`，避免把本地生成的 exe、Node 和构建包提交到仓库。
+- 更新 README，补充 Windows 便携包使用方式。
+
+约束：
+
+- 不把真实 OpenRouter Key 放进 exe、源码、README、执行计划或构建产物。
+- 不引入 Electron 这类大体积桌面框架；本轮仍使用浏览器打开本地控制台。
+- 不改变 OpenRouter 转发协议和现有 API。
+- 便携包可以包含 Node 运行时作为旁路文件，但用户入口必须是 `FreeAgent.exe`。
+- 如果端口已被当前中转站占用，启动器应优先打开已有服务，而不是让用户看不懂报错。
+
+验收标准：
+
+- 运行打包脚本后生成 `dist/FreeAgent-win-x64/FreeAgent.exe`。
+- 双击或运行 `FreeAgent.exe` 会启动本地服务并打开 `http://localhost:3000`。
+- 首次运行没有 `.env` 时，会在本地生成配置并提示用户填写 OpenRouter Key。
+- 真实 key 不会出现在仓库跟踪文件中。
+- 现有 `npm run build`、`node --test` 仍通过。
+
+验证方式：
+
+- 运行 Windows 打包脚本，确认便携目录生成。
+- 在便携目录中运行 `FreeAgent.exe`，确认服务启动、浏览器打开、`/health` 返回 200。
+- 检查生成目录和 git 状态，确认真实密钥没有进入仓库。
+- 运行 `npm run build` 和 `node --test`。
+
+风险和回滚：
+
+- 风险：用户机器缺少 Node。
+  - 回滚：便携包复制当前 Node 运行时，不依赖用户额外安装 Node。
+- 风险：端口 3000 被占用。
+  - 回滚：提示用户修改 `.env` 中的 `PORT`，或后续增加自动端口选择。
+- 风险：首次输入 key 体验不够漂亮。
+  - 回滚：后续在前端增加本地配置向导，但仍只写本机 `.env`。
+
+决策记录：
+
+- 2026-05-22：本轮选择“轻量启动器 + 本地浏览器”而不是 Electron。原因是当前应用已经是本地 Web 控制台，Electron 会显著增加包体积和构建复杂度。
+- 2026-05-22：`RELAY_API_KEY` 在便携包中默认使用 `local-dev-token`，与前端默认值保持一致；该服务默认只跑在本机，后续公网部署时必须换成强随机 token。
+- 2026-05-22：OpenRouter Key 由首次运行时写入本机 `.env`，不做硬编码，便于用户换 key 和避免泄露。
+
 ## 完成记录
 
 最终状态：本地第一版已完成；真实 OpenRouter 调用待用户换新 key 后验证。
@@ -652,6 +713,13 @@ OpenAI 兼容接口。客户端只访问自己的中转站，不直接接触 Ope
 - 2026-05-22：已运行 `node --test`，14 个后端测试全部通过。
 - 2026-05-22：已运行 `antd.cmd lint web --format json`，结果 issues 为 0。
 - 2026-05-22：已验证 `http://localhost:3000` 返回 200，并搜索构建产物确认不再包含 `Input.Password`、`composer-meta` 和输入区旧元信息。
+- 2026-05-22：已新增 Windows 便携启动器源码 `tools/windows-launcher/Program.cs`，双击 `FreeAgent.exe` 可检查本地 `.env`、启动内置 Node 服务并打开浏览器。
+- 2026-05-22：已新增打包脚本 `scripts/build-windows-portable.ps1` 和 `npm run package:win`，输出目录为 `dist/FreeAgent-win-x64/`。
+- 2026-05-22：已更新 `.gitignore`，忽略本地生成的 `dist/`，避免 exe、内置 Node 和用户 `.env` 进入仓库。
+- 2026-05-22：已更新 README，补充 `npm run build` 与 `npm run package:win` 的 Windows 便携包流程。
+- 2026-05-22：已运行 `npm run package:win`，成功生成 `dist/FreeAgent-win-x64/FreeAgent.exe`、内置 `node/node.exe`、`src/`、`public/` 和 `README-START.txt`。
+- 2026-05-22：已用测试配置验证便携目录里的内置 Node 可以启动服务，`http://localhost:3101/health` 返回 200；测试 `.env` 已从生成目录删除。
+- 2026-05-22：已运行生成的 `FreeAgent.exe`，确认它可以识别已有 `http://localhost:3000` 服务并正常退出；测试 `.env` 已从生成目录删除。
 
 后续事项：
 
