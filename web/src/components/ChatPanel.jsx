@@ -20,6 +20,8 @@ export function ChatPanel({
   onContinue,
   onRegenerate,
   onCopy,
+  onAttachFile,
+  onAttachError,
 }) {
   const chatRef = useRef(null);
 
@@ -58,10 +60,11 @@ export function ChatPanel({
       <Composer
         value={prompt}
         busy={busy}
-        model={model}
         onChange={onPromptChange}
         onSend={onSend}
         onStop={onStop}
+        onAttachFile={onAttachFile}
+        onAttachError={onAttachError}
       />
     </section>
   );

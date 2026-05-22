@@ -26,6 +26,8 @@ export function SessionSidebar({
   onRename,
   onDelete,
 }) {
+  const pinnedCount = sessions.filter((session) => session.pinned).length;
+  const messageCount = sessions.reduce((sum, session) => sum + session.messages.length, 0);
   const filtered = [...sessions]
     .sort((left, right) => {
       if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
@@ -53,6 +55,21 @@ export function SessionSidebar({
       </Button>
 
       <Input.Search value={search} onChange={(event) => onSearch(event.target.value)} placeholder="搜索会话或内容" allowClear />
+
+      <div className="sidebar-summary" aria-label="工作台摘要">
+        <div className="sidebar-tile">
+          <span>会话</span>
+          <strong>{sessions.length}</strong>
+        </div>
+        <div className="sidebar-tile">
+          <span>消息</span>
+          <strong>{messageCount}</strong>
+        </div>
+        <div className="sidebar-tile">
+          <span>置顶</span>
+          <strong>{pinnedCount}</strong>
+        </div>
+      </div>
 
       <div className="session-list">
         {filtered.map((session) => (

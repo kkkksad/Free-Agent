@@ -20,6 +20,7 @@ const defaultSettings = {
 
 const AUTO_CONTINUE_LIMIT = 2;
 const STREAM_IDLE_TIMEOUT_MS = 45000;
+const RECENT_FILE_LIMIT = 8;
 
 function createSession(title = '新对话') {
   return {
@@ -67,18 +68,46 @@ function exportMarkdown(session) {
   URL.revokeObjectURL(url);
 }
 
+function formatFileSize(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function escapeFileName(name) {
+  return String(name || '未命名文件').replace(/[<>"&]/g, (character) => ({
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    '&': '&amp;',
+  }[character]));
+}
+
+function buildFilePromptBlock(file) {
+  const normalizedContent = file.content.replace(/\r\n/g, '\n');
+  return [
+    '以下是我上传的文件内容，请把它作为本轮上下文：',
+    '',
+    `<file name="${escapeFileName(file.name)}" size="${formatFileSize(file.size)}">`,
+    normalizedContent,
+    '</file>',
+  ].join('\n');
+}
+
 export function App() {
   const [sessions, setSessions] = useState(() => {
     const saved = readJson(storageKeys.sessions, []);
     return saved.length ? saved : [createSession()];
   });
   const [activeId, setActiveId] = useState(() => localStorage.getItem(storageKeys.activeSession) || '');
-  const [relayKey, setRelayKey] = useState(() => localStorage.getItem(storageKeys.relayKey) || 'local-dev-token');
+  const [relayKey] = useState(() => localStorage.getItem(storageKeys.relayKey) || 'local-dev-token');
   const [pool, setPool] = useState(() => readJson(storageKeys.settings, {}).pool || 'free');
   const [settings, setSettings] = useState(() => ({ ...defaultSettings, ...readJson(storageKeys.settings, {}) }));
   const [models, setModels] = useState([]);
   const [model, setModel] = useState(() => localStorage.getItem(storageKeys.model) || '');
   const [prompt, setPrompt] = useState('');
+  const [recentFiles, setRecentFiles] = useState([]);
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatusText] = useState('连接中');
@@ -449,6 +478,28 @@ export function App() {
     antdMessage.success('已复制');
   }
 
+  function handleAttachFile(file) {
+    const block = buildFilePromptBlock(file);
+    setPrompt((current) => (current.trim() ? `${current.trimEnd()}\n\n${block}` : block));
+    setRecentFiles((current) => [
+      {
+        id: nowId(),
+        name: file.name,
+        size: file.size,
+        sizeLabel: formatFileSize(file.size),
+        characters: file.content.length,
+        type: file.type,
+        attachedAt: Date.now(),
+      },
+      ...current,
+    ].slice(0, RECENT_FILE_LIMIT));
+    antdMessage.success(`已加入 ${file.name}`);
+  }
+
+  function handleAttachError(errorMessage) {
+    antdMessage.warning(errorMessage);
+  }
+
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
@@ -524,15 +575,16 @@ export function App() {
           onContinue={handleContinue}
           onRegenerate={handleRegenerate}
           onCopy={copyText}
+          onAttachFile={handleAttachFile}
+          onAttachError={handleAttachError}
         />
 
         <InspectorPanel
-          relayKey={relayKey}
           model={model}
           models={selectedModels}
           pool={pool}
           metrics={metrics}
-          onRelayKeyChange={setRelayKey}
+          recentFiles={recentFiles}
           onModelChange={(nextModel) => {
             setModel(nextModel);
             localStorage.setItem(storageKeys.model, nextModel);
