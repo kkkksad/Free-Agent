@@ -132,7 +132,7 @@ export function Composer({ value, busy, onChange, onSend, onStop, onAttachFile, 
     }}>
       <Space className="composer-toolbar" wrap size={8}>
         {templates.map(([label, prompt]) => (
-          <Button key={label} size="small" onClick={() => applyTemplate(prompt)}>
+          <Button className="template-button" key={label} size="small" onClick={() => applyTemplate(prompt)}>
             {label}
           </Button>
         ))}
@@ -143,7 +143,7 @@ export function Composer({ value, busy, onChange, onSend, onStop, onAttachFile, 
           multiple
           showUploadList={false}
         >
-          <Button size="small" icon={<PaperClipOutlined />} disabled={busy}>
+          <Button className="template-button" size="small" icon={<PaperClipOutlined />} disabled={busy}>
             上传文件
           </Button>
         </Upload>
@@ -163,10 +163,10 @@ export function Composer({ value, busy, onChange, onSend, onStop, onAttachFile, 
           }}
         />
         <div className="composer-buttons">
-          <Button icon={<StopOutlined />} disabled={!busy} onClick={onStop}>
+          <Button className="stop-button" icon={<StopOutlined />} disabled={!busy} onClick={onStop}>
             停止
           </Button>
-          <Button type="primary" htmlType="submit" loading={busy} icon={<SendOutlined />}>
+          <Button className="send-button" type="primary" htmlType="submit" loading={busy} icon={<SendOutlined />}>
             发送
           </Button>
         </div>

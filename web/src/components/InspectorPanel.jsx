@@ -9,6 +9,16 @@ function formatNumber(value) {
   return new Intl.NumberFormat('zh-CN').format(value || 0);
 }
 
+function formatTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+}
+
+function activityColor(status) {
+  if (status === 'failed') return 'red';
+  if (status === 'interrupted') return 'gold';
+  return 'green';
+}
+
 export function InspectorPanel({
   model,
   models,
@@ -196,6 +206,58 @@ export function InspectorPanel({
     </div>
   );
 
+  const activity = (
+    <div className="tab-stack">
+      <Card
+        size="small"
+        title="最近活动"
+        extra={<Text type="secondary">{metrics.recentActivity.length} 条</Text>}
+      >
+        {metrics.recentActivity.length ? (
+          <div className="activity-list">
+            {metrics.recentActivity.map((item) => (
+              <div className="activity-item" key={item.id}>
+                <span className={`activity-dot ${item.status}`} />
+                <div>
+                  <div className="activity-head">
+                    <Text className="activity-model">{item.model}</Text>
+                    <Tag color={activityColor(item.status)}>{item.statusText}</Tag>
+                  </div>
+                  <div className="activity-foot">
+                    <Text type="secondary">{formatNumber(item.tokens)} tok</Text>
+                    <Text type="secondary">{formatTime(item.createdAt)}</Text>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有请求记录" />
+        )}
+      </Card>
+      <Card size="small" title="工作台状态">
+        <div className="workspace-state-grid">
+          <div>
+            <Text type="secondary">模型池</Text>
+            <strong>{pool === 'code' ? '编码优先' : pool === 'free' ? '免费池' : '全部可用'}</strong>
+          </div>
+          <div>
+            <Text type="secondary">可选模型</Text>
+            <strong>{models.length}</strong>
+          </div>
+          <div>
+            <Text type="secondary">资料</Text>
+            <strong>{recentFiles.length}</strong>
+          </div>
+          <div>
+            <Text type="secondary">异常</Text>
+            <strong>{metrics.failed}</strong>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+
   return (
     <aside className="inspector-pane">
       <Tabs
@@ -206,6 +268,7 @@ export function InspectorPanel({
           { key: 'overview', label: '概览', children: overview },
           { key: 'models', label: '模型', children: modelHealth },
           { key: 'usage', label: '用量', children: usage },
+          { key: 'activity', label: '活动', children: activity },
           { key: 'files', label: '资料', children: files },
           { key: 'settings', label: '设置', children: settings },
         ]}

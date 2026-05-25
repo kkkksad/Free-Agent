@@ -618,6 +618,7 @@ export function App() {
         <ChatPanel
           session={activeSession}
           model={model}
+          metrics={metrics}
           prompt={prompt}
           busy={busy}
           onPromptChange={setPrompt}

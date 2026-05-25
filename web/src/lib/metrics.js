@@ -63,6 +63,22 @@ export function sessionMetrics(sessions) {
     }))
     .sort((left, right) => right.calls - left.calls);
 
+  const recentActivity = [...assistantMessages]
+    .sort((left, right) => (right.createdAt || 0) - (left.createdAt || 0))
+    .slice(0, 8)
+    .map((message) => {
+      const failedMessage = message.type === 'error';
+      const interrupted = Boolean(message.interrupted);
+      return {
+        id: message.id,
+        model: message.model || '未记录模型',
+        status: failedMessage ? 'failed' : interrupted ? 'interrupted' : 'success',
+        statusText: failedMessage ? '异常' : interrupted ? '未完成' : '完成',
+        tokens: message.usage?.completion_tokens || estimateTokens(message.content),
+        createdAt: message.createdAt || Date.now(),
+      };
+    });
+
   return {
     calls: assistantMessages.length,
     success: completed.length,
@@ -74,5 +90,6 @@ export function sessionMetrics(sessions) {
     averageOutputTokens: completed.length ? Math.round(outputTokens / completed.length) : 0,
     trend,
     modelHealth,
+    recentActivity,
   };
 }

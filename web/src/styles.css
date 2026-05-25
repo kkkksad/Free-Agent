@@ -43,7 +43,7 @@ select {
 
 .relay-workspace {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 324px;
+  grid-template-columns: 292px minmax(0, 1fr) 356px;
   gap: 1px;
   width: min(1500px, 100vw);
   height: 100vh;
@@ -61,7 +61,7 @@ select {
 
 .sidebar-pane {
   display: grid;
-  grid-template-rows: auto auto auto auto 1fr;
+  grid-template-rows: auto auto auto auto auto 1fr;
   gap: 12px;
   padding: 16px;
 }
@@ -153,6 +153,24 @@ select {
   font-weight: 650;
 }
 
+.sidebar-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  padding-inline: 2px;
+  font-size: 12px;
+}
+
+.session-empty {
+  display: grid;
+  min-height: 96px;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
 .session-card {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -215,13 +233,59 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 64px;
-  padding: 14px 18px;
+  min-height: 78px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--line);
+}
+
+.chat-title-block {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chat-title-block > div:first-child {
+  min-width: 0;
+}
+
+.chat-title-block h4 {
+  overflow: hidden;
+  max-width: min(56vw, 640px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.status-pill.active {
+  border-color: #bfdbfe;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .chat-head .ant-space {
   justify-content: flex-end;
+}
+
+.chat-actions {
+  flex: 0 0 auto;
 }
 
 .chat-log {
@@ -232,6 +296,87 @@ select {
   background:
     linear-gradient(var(--line), var(--line)) 48px 0 / 1px 100% no-repeat,
     var(--surface);
+}
+
+.chat-empty-state {
+  display: grid;
+  align-content: center;
+  gap: 12px;
+  min-height: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 8px;
+  animation: panel-in 180ms ease both;
+}
+
+.chat-empty-state h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 680;
+  line-height: 1.12;
+}
+
+.empty-kicker {
+  width: max-content;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.starter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.starter-card {
+  display: grid;
+  gap: 8px;
+  min-height: 138px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.starter-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+}
+
+.starter-card strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.starter-card span:last-child {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.starter-icon {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--accent);
+  font-size: 16px;
 }
 
 .message-row {
@@ -371,6 +516,10 @@ select {
   min-width: 0;
 }
 
+.template-button {
+  background: var(--surface-subtle);
+}
+
 .composer-input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 92px;
@@ -380,6 +529,10 @@ select {
 .composer-buttons {
   display: grid;
   gap: 8px;
+}
+
+.send-button {
+  font-weight: 650;
 }
 
 .inspector-pane {
@@ -538,6 +691,91 @@ select {
   white-space: nowrap;
 }
 
+.activity-list {
+  display: grid;
+  gap: 10px;
+}
+
+.activity-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.activity-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.activity-dot.success {
+  background: #16a34a;
+}
+
+.activity-dot.failed {
+  background: #dc2626;
+}
+
+.activity-dot.interrupted {
+  background: #d97706;
+}
+
+.activity-head,
+.activity-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.activity-foot {
+  margin-top: 4px;
+}
+
+.activity-model {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-state-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workspace-state-grid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.workspace-state-grid strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .capability-list {
   display: grid;
   gap: 9px;
@@ -668,7 +906,8 @@ select {
 @media (max-width: 760px) {
   .relay-workspace {
     grid-template-columns: 1fr;
-    width: 100vw;
+    width: 100%;
+    max-width: 100%;
     border-inline: 0;
   }
 
@@ -683,6 +922,10 @@ select {
   .chat-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .chat-title-block h4 {
+    max-width: 100%;
   }
 
   .chat-log {
@@ -702,6 +945,10 @@ select {
 
   .composer-buttons {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .starter-grid {
+    grid-template-columns: 1fr;
   }
 
   .setup-shell {

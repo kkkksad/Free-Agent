@@ -71,8 +71,13 @@ export function SessionSidebar({
         </div>
       </div>
 
+      <div className="sidebar-section-head">
+        <Text type="secondary">会话</Text>
+        <Text type="secondary">{filtered.length}</Text>
+      </div>
+
       <div className="session-list">
-        {filtered.map((session) => (
+        {filtered.length ? filtered.map((session) => (
           <article key={session.id} className={`session-card ${session.id === activeId ? 'active' : ''}`}>
             <button className="session-main" type="button" onClick={() => onSelect(session.id)}>
               <strong>{session.title || '新对话'}</strong>
@@ -90,7 +95,11 @@ export function SessionSidebar({
               </Tooltip>
             </Space>
           </article>
-        ))}
+        )) : (
+          <div className="session-empty">
+            <Text type="secondary">没有匹配的会话</Text>
+          </div>
+        )}
       </div>
     </aside>
   );
