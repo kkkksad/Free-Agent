@@ -116,10 +116,14 @@ dist/FreeAgent-win-x64/FreeAgent.exe
 
 1. 打开 `dist/FreeAgent-win-x64/`。
 2. 双击 `FreeAgent.exe`。
-3. 第一次运行时按提示粘贴 OpenRouter Key。
+3. 第一次运行时在网页向导里填写 OpenRouter Key。
 4. 浏览器会自动打开 `http://localhost:3000`。
 
-换 key 时编辑便携目录里的 `.env`，修改 `OPENROUTER_API_KEY` 后重新启动即可。
+如果 `.env` 里还没有有效 OpenRouter Key，页面会自动弹出首次配置向导。
+输入 `sk-or-...` 后，服务会把 key 写入当前目录的 `.env`。页面不会在设置区展示
+真实 key，也不会把它写入 localStorage。
+
+换 key 时可以编辑便携目录里的 `.env`，修改 `OPENROUTER_API_KEY` 后重新启动。
 不要把 `.env` 发给别人，也不要提交到仓库。
 
 ## 调用方式

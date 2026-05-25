@@ -3,8 +3,9 @@ import { ConfigProvider, Modal, message as antdMessage } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { ChatPanel } from './components/ChatPanel.jsx';
 import { InspectorPanel } from './components/InspectorPanel.jsx';
+import { SetupWizard } from './components/SetupWizard.jsx';
 import { SessionSidebar } from './components/SessionSidebar.jsx';
-import { fetchModels, requestChatStream, StreamInterruptedError } from './api/relay.js';
+import { fetchModels, fetchSetupStatus, requestChatStream, saveSetupConfig, StreamInterruptedError } from './api/relay.js';
 import { CODE_MODEL_PRIORITY, FALLBACK_MODEL, detectTaskModel, selectModels } from './lib/models.js';
 import { continuationPrompt } from './lib/continuation.js';
 import { sessionMetrics } from './lib/metrics.js';
@@ -112,6 +113,14 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [status, setStatusText] = useState('连接中');
   const [statusTone, setStatusTone] = useState('normal');
+  const [setup, setSetup] = useState({
+    checked: false,
+    open: false,
+    step: 0,
+    saving: false,
+    testing: false,
+    error: '',
+  });
 
   const controllerRef = useRef(null);
   const stopRequestedRef = useRef(false);
@@ -247,6 +256,54 @@ export function App() {
     setModel(nextModel);
     localStorage.setItem(storageKeys.model, nextModel);
     setStatus(`已连接，${filtered.length} 个模型`);
+  }
+
+  async function checkSetupStatus({ refreshOnConfigured = false } = {}) {
+    try {
+      const payload = await fetchSetupStatus();
+      if (payload.configured) {
+        setSetup((current) => ({ ...current, checked: true, open: false, error: '' }));
+        if (refreshOnConfigured) await refreshModels();
+      } else {
+        setSetup((current) => ({
+          ...current,
+          checked: true,
+          open: true,
+          step: 0,
+          error: '',
+        }));
+        setStatus('等待首次配置');
+      }
+    } catch (error) {
+      setSetup((current) => ({ ...current, checked: true, open: false, error: error.message }));
+      if (refreshOnConfigured) {
+        await refreshModels().catch((refreshError) => setStatus(refreshError.message, 'error'));
+      }
+    }
+  }
+
+  async function handleSetupSave(openRouterApiKey) {
+    setSetup((current) => ({ ...current, saving: true, testing: false, error: '' }));
+    try {
+      await saveSetupConfig({ openRouterApiKey });
+      setSetup((current) => ({ ...current, saving: false, testing: true, step: 1 }));
+      await refreshModels();
+      setSetup((current) => ({
+        ...current,
+        checked: true,
+        saving: false,
+        testing: false,
+        step: 2,
+        error: '',
+      }));
+    } catch (error) {
+      setSetup((current) => ({
+        ...current,
+        saving: false,
+        testing: false,
+        error: error.message,
+      }));
+    }
   }
 
   async function sendOnce({ sessionId, assistantId, currentPrompt, skipIds, append = false, fixedModel }) {
@@ -519,7 +576,7 @@ export function App() {
   }, [relayKey, settings, pool]);
 
   useEffect(() => {
-    refreshModels().catch((error) => setStatus(error.message, 'error'));
+    checkSetupStatus({ refreshOnConfigured: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -596,6 +653,16 @@ export function App() {
           onRefresh={() => refreshModels().catch((error) => setStatus(error.message, 'error'))}
         />
       </main>
+      <SetupWizard
+        open={setup.open}
+        saving={setup.saving}
+        testing={setup.testing}
+        step={setup.step}
+        error={setup.error}
+        onSave={handleSetupSave}
+        onRetryStatus={() => checkSetupStatus({ refreshOnConfigured: true })}
+        onFinish={() => setSetup((current) => ({ ...current, open: false }))}
+      />
     </ConfigProvider>
   );
 }

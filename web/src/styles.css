@@ -550,6 +550,53 @@ select {
   gap: 8px;
 }
 
+.setup-modal .ant-modal-content {
+  padding: 0;
+  overflow: hidden;
+}
+
+.setup-shell {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.setup-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.setup-head h3 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.setup-steps {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.setup-body {
+  display: grid;
+  gap: 14px;
+}
+
+.setup-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setup-modal .ant-result {
+  padding: 12px 0 4px;
+}
+
 .form-stack {
   display: grid;
   gap: 12px;
@@ -655,5 +702,14 @@ select {
 
   .composer-buttons {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .setup-shell {
+    padding: 18px;
+  }
+
+  .setup-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

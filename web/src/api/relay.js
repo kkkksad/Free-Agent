@@ -22,6 +22,30 @@ export async function fetchModels(relayKey) {
   return (payload.data ?? []).map((model) => model.id);
 }
 
+export async function fetchSetupStatus() {
+  const response = await fetch('/local/setup/status');
+  if (!response.ok) {
+    throw new Error(`配置状态读取失败：${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function saveSetupConfig({ openRouterApiKey }) {
+  const response = await fetch('/local/setup/config', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ openRouterApiKey }),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(payload?.error?.message ?? `配置保存失败：${response.status}`);
+  }
+
+  return payload;
+}
+
 export async function requestChatStream({
   relayKey,
   body,

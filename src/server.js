@@ -8,26 +8,46 @@ const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MESSAGES_URL = 'https://openrouter.ai/api/v1/messages';
 const OPENROUTER_MESSAGES_COUNT_TOKENS_URL = 'https://openrouter.ai/api/v1/messages/count_tokens';
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+const DEFAULT_ALLOWED_MODELS = [
+  'openrouter/free',
+  'qwen/qwen3-coder:free',
+  'baidu/cobuddy:free',
+  'openrouter/owl-alpha',
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+  'poolside/laguna-m.1:free',
+  'poolside/laguna-xs.2:free',
+];
+const DEFAULT_FALLBACK_MODELS = ['qwen/qwen3-coder:free', 'openrouter/free'];
 const PUBLIC_DIR = path.resolve('public');
+
+function readDotEnvFile(filePath = '.env') {
+  const env = {};
+  if (!fs.existsSync(filePath)) return env;
+
+  const content = fs.readFileSync(filePath, 'utf8');
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const eqIndex = trimmed.indexOf('=');
+    if (eqIndex === -1) continue;
+
+    const key = trimmed.slice(0, eqIndex).trim();
+    let value = trimmed.slice(eqIndex + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+
+    if (key) env[key] = value;
+  }
+
+  return env;
+}
 
 function loadDotEnv(filePath = '.env') {
   try {
-    if (!fs.existsSync(filePath)) return;
-
-    const content = fs.readFileSync(filePath, 'utf8');
-    for (const line of content.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-
-      const eqIndex = trimmed.indexOf('=');
-      if (eqIndex === -1) continue;
-
-      const key = trimmed.slice(0, eqIndex).trim();
-      let value = trimmed.slice(eqIndex + 1).trim();
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-
+    const env = readDotEnvFile(filePath);
+    for (const [key, value] of Object.entries(env)) {
       if (key && process.env[key] === undefined) {
         process.env[key] = value;
       }
@@ -73,6 +93,108 @@ function sendJson(res, statusCode, payload, headers = {}) {
     ...headers,
   });
   res.end(body);
+}
+
+function isConfiguredOpenRouterKey(value) {
+  if (!value || typeof value !== 'string') return false;
+  if (!value.startsWith('sk-or-')) return false;
+  return !/replace|your-new-key/i.test(value);
+}
+
+function setupStatusPayload(config) {
+  return {
+    configured: isConfiguredOpenRouterKey(config.openRouterApiKey),
+    openRouterKeyConfigured: isConfiguredOpenRouterKey(config.openRouterApiKey),
+    relayKeyConfigured: Boolean(config.relayApiKey),
+    allowedModelCount: config.allowedModels.length,
+    port: config.port,
+  };
+}
+
+function isLocalRequest(req) {
+  const remote = req.socket?.remoteAddress ?? '';
+  return remote === '127.0.0.1'
+    || remote === '::1'
+    || remote === '::ffff:127.0.0.1'
+    || remote === 'localhost';
+}
+
+function writeDotEnvValues(filePath, updates) {
+  const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8').split(/\r?\n/) : [];
+  const remaining = new Map(Object.entries(updates));
+  const nextLines = existing.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return line;
+
+    const eqIndex = line.indexOf('=');
+    if (eqIndex === -1) return line;
+
+    const key = line.slice(0, eqIndex).trim();
+    if (!remaining.has(key)) return line;
+
+    const value = remaining.get(key);
+    remaining.delete(key);
+    return `${key}=${value}`;
+  });
+
+  if (nextLines.length && nextLines.at(-1) !== '') nextLines.push('');
+  for (const [key, value] of remaining.entries()) {
+    nextLines.push(`${key}=${value}`);
+  }
+
+  fs.writeFileSync(filePath, `${nextLines.join('\n').replace(/\n+$/, '')}\n`, 'utf8');
+  for (const [key, value] of Object.entries(updates)) {
+    process.env[key] = value;
+  }
+}
+
+async function handleSetupSave(req, res, config, envPath) {
+  if (!isLocalRequest(req)) {
+    sendJson(res, 403, errorPayload('local_only', '配置接口只允许本机访问。', 'forbidden_error'));
+    return;
+  }
+
+  let body;
+  try {
+    body = await readJsonBody(req, 64 * 1024);
+  } catch {
+    sendJson(res, 400, errorPayload('invalid_json', '请求体必须是有效 JSON。', 'invalid_request_error'));
+    return;
+  }
+
+  const openRouterApiKey = typeof body.openRouterApiKey === 'string' ? body.openRouterApiKey.trim() : '';
+  if (!isConfiguredOpenRouterKey(openRouterApiKey)) {
+    sendJson(res, 400, errorPayload('invalid_openrouter_key', '请输入有效的 OpenRouter Key。', 'invalid_request_error'));
+    return;
+  }
+
+  const updates = {
+    OPENROUTER_API_KEY: openRouterApiKey,
+  };
+
+  if (!config.relayApiKey) {
+    updates.RELAY_API_KEY = 'local-dev-token';
+  }
+
+  if (!config.allowedModels.length) {
+    updates.ALLOWED_MODELS = DEFAULT_ALLOWED_MODELS.join(',');
+  }
+
+  if (!config.fallbackModels.length) {
+    updates.FALLBACK_MODELS = DEFAULT_FALLBACK_MODELS.join(',');
+  }
+
+  if (!config.siteUrl) updates.OPENROUTER_SITE_URL = `http://localhost:${config.port || 3000}`;
+  if (!config.appTitle) updates.OPENROUTER_APP_TITLE = 'Free Agent';
+  if (!process.env.MAX_BODY_BYTES) updates.MAX_BODY_BYTES = String(DEFAULT_MAX_BODY_BYTES);
+
+  writeDotEnvValues(envPath, updates);
+
+  const savedConfig = getConfig(process.env);
+  sendJson(res, 200, {
+    status: 'saved',
+    setup: setupStatusPayload(savedConfig),
+  });
 }
 
 function responseContentType(headers, fallback) {
@@ -475,6 +597,7 @@ async function proxyAnthropicJsonEndpoint(req, res, config, fetchImpl, options) 
 function createServer(options = {}) {
   const fetchImpl = options.fetchImpl ?? fetch;
   const configProvider = options.configProvider ?? (() => getConfig());
+  const envPath = options.envPath ?? '.env';
 
   return http.createServer(async (req, res) => {
     const config = configProvider();
@@ -500,6 +623,21 @@ function createServer(options = {}) {
 
     if (req.method === 'GET' && pathname === '/health') {
       sendJson(res, 200, { status: 'ok' });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/local/setup/status') {
+      if (!isLocalRequest(req)) {
+        sendJson(res, 403, errorPayload('local_only', '配置接口只允许本机访问。', 'forbidden_error'));
+        return;
+      }
+
+      sendJson(res, 200, setupStatusPayload(config));
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/local/setup/config') {
+      await handleSetupSave(req, res, config, envPath);
       return;
     }
 
@@ -615,10 +753,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
 export {
   createServer,
   getConfig,
+  isLocalRequest,
   loadDotEnv,
   modelIdFromPath,
   modelListPayload,
   normalizePath,
+  readDotEnvFile,
   startServer,
   validateChatRequest,
   validateMessagesRequest,

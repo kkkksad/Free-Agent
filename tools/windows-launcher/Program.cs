@@ -84,22 +84,9 @@ namespace FreeAgent.Launcher
                 return true;
             }
 
-            Console.WriteLine("首次运行需要填写 OpenRouter Key。");
-            Console.WriteLine("这个 key 只会写入当前目录的 .env，不会写进 exe。");
-            Console.Write("请粘贴 OpenRouter Key 后回车；直接回车会打开配置文件并退出：");
-            string input = (Console.ReadLine() ?? "").Trim();
-
-            if (!IsUsableOpenRouterKey(input))
-            {
-                Console.WriteLine();
-                Console.WriteLine(".env 已创建，你可以稍后把 OPENROUTER_API_KEY 改成自己的 key。");
-                OpenTextEditor(envPath);
-                return false;
-            }
-
-            SetEnvValue(envPath, "OPENROUTER_API_KEY", input);
             EnsureRequiredDefaults(envPath);
-            Console.WriteLine("配置已保存。");
+            Console.WriteLine("检测到还没有配置 OpenRouter Key。");
+            Console.WriteLine("浏览器打开后会进入首次配置向导，key 只会保存到当前目录的 .env。");
             Console.WriteLine();
             return true;
         }
@@ -291,22 +278,6 @@ namespace FreeAgent.Launcher
             {
                 Console.WriteLine("无法自动打开浏览器，请手动访问：" + url);
                 Console.WriteLine(error.Message);
-            }
-        }
-
-        private static void OpenTextEditor(string filePath)
-        {
-            try
-            {
-                ProcessStartInfo startInfo = new ProcessStartInfo();
-                startInfo.FileName = "notepad.exe";
-                startInfo.Arguments = "\"" + filePath + "\"";
-                startInfo.UseShellExecute = false;
-                Process.Start(startInfo);
-            }
-            catch
-            {
-                Console.WriteLine("请手动编辑：" + filePath);
             }
         }
 
